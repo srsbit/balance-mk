@@ -1,6 +1,8 @@
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.Scanner;
 import javax.swing.JOptionPane;
 
@@ -12,20 +14,18 @@ public class Main {
             setEthernetLink(i);
         }
         for (int i = 1; i <= numLinks; i++) {
-            String ipAddress = askIpAddress(scanner, i);
-            String gateway = askGateway(scanner, i);
-            addIpAddress(ipAddress, i);
-            addIpRoute(i, gateway,numLinks);
-            addFirewallMangle(i,numLinks);
+           
+            askAuthType(scanner, numLinks, i);
+            
         }
         runMikrotikScript("/ip dns set servers=8.8.8.8");
-        runMikrotikScript("/ip firewall nat\n" +
-"add action=masquerade chain=srcnat");
-        
+        runMikrotikScript("/ip firewall nat add action=masquerade chain=srcnat");
+        runMikrotikScript("////////////////////////////////////////////////////////////////////");
         exibirResultadoFinal(numLinks);
         
  
     }
+    
 
    private static int askNumLinks(Scanner scanner) {
     String response = JOptionPane.showInputDialog(null, "Quantos links serão usados?");
@@ -42,7 +42,54 @@ private static String askGateway(Scanner scanner, int linkNum) {
     return response;
 }
 
+   private static String askAuthType(Scanner scanner, int numLinks, int i) {
+  
+       String[] options = { "PPPoE", "DHCP", "IP Fixo" };
+    int selectedOption = JOptionPane.showOptionDialog(null, "Qual tipo de autenticação para a porta " + i + "?", "Escolha o tipo de autenticação", JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+   String gateway;
+    switch (selectedOption) {
+        case 0:
+            String user = JOptionPane.showInputDialog(null, "Qual usurio pppoe " + i + "?");
+            String password = JOptionPane.showInputDialog(null, "Qual password pppoe " + i + "?");
+            
+            editarPPPoE(i, password, user);
+            
+             gateway = askGateway(scanner, i);
+            addIpRoute(i, gateway,numLinks);
+            addFirewallMangle(i,numLinks);
+            
+            return "pppoe";
+        case 1:
+            
+            addDhcpClient(i);
+            gateway = askGateway(scanner, i);
+            addIpRoute(i, gateway,numLinks);
+            addFirewallMangle(i,numLinks);
+            
+            return "dhcp-client";
+        case 2:
+            
+             String ipAddress = askIpAddress(scanner, i);
+             gateway = askGateway(scanner, i);
+            addIpAddress(ipAddress, i);
+            addIpRoute(i, gateway,numLinks);
+            addFirewallMangle(i,numLinks);
+          
+            return "static";
+        default:
+            return "";
+    }
+}
    
+   
+
+   
+private static void addDhcpClient(int linkNum) {
+    String command = "/ip dhcp-client\n" +
+"add add-default-route=no disabled=no interface=\"LINK "+linkNum+"\" use-peer-dns=\\\n" +
+"    no";
+    runMikrotikScript(command);
+}
 
     private static void setEthernetLink(int linkNum) {
         String command = "/interface ethernet set [ find default-name=ether"
@@ -50,9 +97,12 @@ private static String askGateway(Scanner scanner, int linkNum) {
         runMikrotikScript(command);
     }
 
+
+    
+    
     private static void addIpAddress(String ipAddress, int linkNum) {
         String command = "/ip address add address=" + ipAddress + 
-                "/24 interface=\"LINK " + linkNum + "\" network=" 
+                " interface=\"LINK " + linkNum + "\" network=" 
                 + getNetwork(ipAddress) + ".0";
         runMikrotikScript(command);
     }
@@ -93,6 +143,19 @@ private static String askGateway(Scanner scanner, int linkNum) {
             e.printStackTrace();
         }
     }
+    
+    
+
+    
+
+    public static void editarPPPoE(int linkNum, String password, String user) {
+        String command = "/interface pppoe-client add add-default-route=yes disabled=no interface=\"LINK "+linkNum+"\" name=\\ \"PPPOE LINK "+linkNum+"\" password="+password+" user="+user;
+        runMikrotikScript(command);
+    }
+
+
+
+
 
     private static void exibirResultadoFinal(int numLinks) {
         System.out.println("Configuração concluída para " + numLinks + " links.");
